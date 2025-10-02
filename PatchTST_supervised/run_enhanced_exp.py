@@ -109,6 +109,9 @@ if __name__ == '__main__':
     parser.add_argument('--pct_start', type=float, default=0.3, help='pct_start for OneCycleLR scheduler')
     parser.add_argument('--use_amp', action='store_true', help='use automatic mixed precision training', default=False)
 
+    # Testing
+    parser.add_argument('--test_flop', action='store_true', default=False, help='See utils.py')
+
     # GPU
     parser.add_argument('--use_gpu', type=bool, default=True, help='use gpu')
     parser.add_argument('--gpu', type=int, default=0, help='gpu')
