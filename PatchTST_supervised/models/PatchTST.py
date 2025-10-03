@@ -25,6 +25,7 @@ class Model(nn.Module):
         self.use_checkpoint = use_checkpoint
         
         print('PatchTST model parameters:')
+        print(f'Performance optimizations - use_checkpoint: {use_checkpoint}, compile_model: {compile_model}')
         # load parameters
         c_in = configs.enc_in
         context_window = configs.seq_len
