@@ -21,6 +21,10 @@ class Model(nn.Module):
         
         super().__init__()
         
+        # Get optimization parameters from configs object (command line args)
+        use_checkpoint = getattr(configs, 'use_checkpoint', use_checkpoint)
+        compile_model = getattr(configs, 'compile_model', compile_model)
+        
         # Performance optimization parameters
         self.use_checkpoint = use_checkpoint
         
