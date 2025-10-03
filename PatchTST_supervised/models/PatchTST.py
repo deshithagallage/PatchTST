@@ -7,6 +7,7 @@ from torch import nn
 from torch import Tensor
 import torch.nn.functional as F
 import numpy as np
+import torch.utils.checkpoint as checkpoint
 
 from layers.PatchTST_backbone import PatchTST_backbone
 from layers.PatchTST_layers import series_decomp
@@ -15,10 +16,15 @@ from layers.PatchTST_layers import series_decomp
 class Model(nn.Module):
     def __init__(self, configs, max_seq_len:Optional[int]=1024, d_k:Optional[int]=None, d_v:Optional[int]=None, norm:str='BatchNorm', attn_dropout:float=0., 
                  act:str="gelu", key_padding_mask:bool='auto',padding_var:Optional[int]=None, attn_mask:Optional[Tensor]=None, res_attention:bool=True, 
-                 pre_norm:bool=False, store_attn:bool=False, pe:str='zeros', learn_pe:bool=True, pretrain_head:bool=False, head_type = 'flatten', verbose:bool=False, **kwargs):
+                 pre_norm:bool=False, store_attn:bool=False, pe:str='zeros', learn_pe:bool=True, pretrain_head:bool=False, head_type = 'flatten', 
+                 verbose:bool=False, use_checkpoint:bool=False, compile_model:bool=False, **kwargs):
         
         super().__init__()
         
+        # Performance optimization parameters
+        self.use_checkpoint = use_checkpoint
+        
+        print('PatchTST model parameters:')
         # load parameters
         c_in = configs.enc_in
         context_window = configs.seq_len
@@ -75,18 +81,46 @@ class Model(nn.Module):
                                   pe=pe, learn_pe=learn_pe, fc_dropout=fc_dropout, head_dropout=head_dropout, padding_patch = padding_patch,
                                   pretrain_head=pretrain_head, head_type=head_type, individual=individual, revin=revin, affine=affine,
                                   subtract_last=subtract_last, verbose=verbose, **kwargs)
+        
+        # Apply model compilation if requested and available (PyTorch 2.0+)
+        if compile_model and hasattr(torch, 'compile'):
+            print("Using torch.compile to optimize the model")
+            if self.decomposition:
+                self.model_trend = torch.compile(self.model_trend)
+                self.model_res = torch.compile(self.model_res)
+            else:
+                self.model = torch.compile(self.model)
     
     
     def forward(self, x):           # x: [Batch, Input length, Channel]
         if self.decomposition:
             res_init, trend_init = self.decomp_module(x)
-            res_init, trend_init = res_init.permute(0,2,1), trend_init.permute(0,2,1)  # x: [Batch, Channel, Input length]
-            res = self.model_res(res_init)
-            trend = self.model_trend(trend_init)
+            # Use transpose + contiguous for better performance than permute
+            res_init = res_init.transpose(1, 2).contiguous()  # [Batch, Channel, Input length]
+            trend_init = trend_init.transpose(1, 2).contiguous()  # [Batch, Channel, Input length]
+            
+            print('Decomposition applied')
+            print('res_init shape:', res_init.shape)
+            print('trend_init shape:', trend_init.shape)
+            # Apply gradient checkpointing if enabled
+            if self.use_checkpoint and self.training:
+                res = checkpoint.checkpoint(self.model_res, res_init)
+                trend = checkpoint.checkpoint(self.model_trend, trend_init)
+            else:
+                res = self.model_res(res_init)
+                trend = self.model_trend(trend_init)
+            
             x = res + trend
-            x = x.permute(0,2,1)    # x: [Batch, Input length, Channel]
+            x = x.transpose(1, 2).contiguous()    # [Batch, Input length, Channel]
         else:
-            x = x.permute(0,2,1)    # x: [Batch, Channel, Input length]
-            x = self.model(x)
-            x = x.permute(0,2,1)    # x: [Batch, Input length, Channel]
+            x = x.transpose(1, 2).contiguous()    # [Batch, Channel, Input length]
+            
+            # Apply gradient checkpointing if enabled
+            if self.use_checkpoint and self.training:
+                print('Checkpointing applied')
+                x = checkpoint.checkpoint(self.model, x)
+            else:
+                x = self.model(x)
+                
+            x = x.transpose(1, 2).contiguous()    # [Batch, Input length, Channel]
         return x
