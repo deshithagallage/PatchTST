@@ -87,14 +87,10 @@ class Model(nn.Module):
                                   pretrain_head=pretrain_head, head_type=head_type, individual=individual, revin=revin, affine=affine,
                                   subtract_last=subtract_last, verbose=verbose, **kwargs)
         
-        # Apply model compilation if requested and available (PyTorch 2.0+)
-        if compile_model and hasattr(torch, 'compile'):
-            print("Using torch.compile to optimize the model")
-            if self.decomposition:
-                self.model_trend = torch.compile(self.model_trend)
-                self.model_res = torch.compile(self.model_res)
-            else:
-                self.model = torch.compile(self.model)
+        # Disable model compilation to avoid gradient issues during training
+        # Model compilation can interfere with gradient computation
+        print(f"Model compilation disabled to ensure gradient compatibility")
+        self.use_compiled = False
     
     
     def forward(self, x):           # x: [Batch, Input length, Channel]
@@ -104,28 +100,19 @@ class Model(nn.Module):
             res_init = res_init.transpose(1, 2).contiguous()  # [Batch, Channel, Input length]
             trend_init = trend_init.transpose(1, 2).contiguous()  # [Batch, Channel, Input length]
             
-            print('Decomposition applied')
-            print('res_init shape:', res_init.shape)
-            print('trend_init shape:', trend_init.shape)
-            # Apply gradient checkpointing if enabled
-            if self.use_checkpoint and self.training:
-                res = checkpoint.checkpoint(self.model_res, res_init)
-                trend = checkpoint.checkpoint(self.model_trend, trend_init)
-            else:
-                res = self.model_res(res_init)
-                trend = self.model_trend(trend_init)
+            # Temporarily disable checkpointing to avoid gradient issues
+            # TODO: Investigate gradient checkpointing compatibility
+            res = self.model_res(res_init)
+            trend = self.model_trend(trend_init)
             
             x = res + trend
             x = x.transpose(1, 2).contiguous()    # [Batch, Input length, Channel]
         else:
             x = x.transpose(1, 2).contiguous()    # [Batch, Channel, Input length]
             
-            # Apply gradient checkpointing if enabled
-            if self.use_checkpoint and self.training:
-                print('Checkpointing applied')
-                x = checkpoint.checkpoint(self.model, x)
-            else:
-                x = self.model(x)
+            # Temporarily disable checkpointing to avoid gradient issues
+            # TODO: Investigate gradient checkpointing compatibility
+            x = self.model(x)
                 
             x = x.transpose(1, 2).contiguous()    # [Batch, Input length, Channel]
         return x
