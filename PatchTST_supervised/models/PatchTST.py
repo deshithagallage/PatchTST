@@ -20,12 +20,20 @@ class Model(nn.Module):
         
         super().__init__()
         
-        # Get multi-scale parameter from configs
-        use_multiscale = getattr(configs, 'use_multiscale', use_multiscale)
-        self.use_multiscale = use_multiscale
+        # Enhanced multi-scale configuration
+        multi_scale = getattr(configs, 'multi_scale', None)
+        self.use_multiscale = multi_scale is not None
         
-        print('PatchTST Enhanced Performance Features:')
-        print(f'Multi-scale patching: {use_multiscale}')
+        if self.use_multiscale:
+            # Parse multi-scale options
+            if len(multi_scale) == 0:  # --multi_scale (no args) = use all
+                scales_to_use = ['small', 'medium', 'large']
+            else:  # --multi_scale small large = use only specified
+                scales_to_use = multi_scale
+            
+            print(f'PatchTST Multi-Scale Configuration: {scales_to_use}')
+        else:
+            print('PatchTST Single-Scale Mode')
         
         # load parameters
         c_in = configs.enc_in
@@ -55,10 +63,23 @@ class Model(nn.Module):
         
         # Multi-scale patching setup
         if self.use_multiscale:
-            # Define multiple patch sizes: small, medium (original), large
-            self.patch_sizes = [max(patch_len // 2, 4), patch_len, min(patch_len * 2, context_window // 4)]
-            self.strides = [max(stride // 2, 2), stride, min(stride * 2, context_window // 8)]
-            print(f"Using multi-scale patches: {self.patch_sizes} with strides: {self.strides}")
+            # Define all possible scales
+            all_scales = {
+                'small': (max(patch_len // 2, 4), max(stride // 2, 2)),
+                'medium': (patch_len, stride), 
+                'large': (min(patch_len * 2, context_window // 4), min(stride * 2, context_window // 8))
+            }
+            
+            # Select only requested scales
+            selected_scales = {k: v for k, v in all_scales.items() if k in scales_to_use}
+            
+            self.patch_sizes = [v[0] for v in selected_scales.values()]
+            self.strides = [v[1] for v in selected_scales.values()]
+            self.scale_names = list(selected_scales.keys())
+            
+            print(f'Using scales: {self.scale_names}')
+            print(f'Patch sizes: {self.patch_sizes}')
+            print(f'Strides: {self.strides}')
         
         # model
         self.decomposition = decomposition
