@@ -22,6 +22,9 @@ warnings.filterwarnings('ignore')
 class Exp_Main(Exp_Basic):
     def __init__(self, args):
         super(Exp_Main, self).__init__(args)
+        # Add timing tracking
+        self.training_start_time = None
+        self.training_end_time = None
 
     def _build_model(self):
         model_dict = {
@@ -106,6 +109,9 @@ class Exp_Main(Exp_Basic):
         if not os.path.exists(path):
             os.makedirs(path)
 
+        # Record training start time
+        self.training_start_time = time.time()
+        
         time_now = time.time()
 
         train_steps = len(train_loader)
@@ -211,6 +217,9 @@ class Exp_Main(Exp_Basic):
             else:
                 print('Updating learning rate to {}'.format(scheduler.get_last_lr()[0]))
 
+        # Record training end time
+        self.training_end_time = time.time()
+        
         best_model_path = path + '/' + 'checkpoint.pth'
         self.model.load_state_dict(torch.load(best_model_path))
 
@@ -299,10 +308,20 @@ class Exp_Main(Exp_Basic):
 
         mae, mse, rmse, mape, mspe, rse, corr = metric(preds, trues)
         print('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
+        
         f = open("result.txt", 'a')
+        
+        # Calculate training time
+        training_time_str = "N/A"
+        if hasattr(self, 'training_start_time') and hasattr(self, 'training_end_time'):
+            if self.training_start_time and self.training_end_time:
+                training_time = self.training_end_time - self.training_start_time
+                training_time_str = f"{training_time:.1f}s ({training_time/60:.1f}min)"
+        
+        # Write results with training time on a new line
         f.write(setting + "  \n")
-        f.write('mse:{}, mae:{}, rse:{}'.format(mse, mae, rse))
-        f.write('\n')
+        f.write('mse:{}, mae:{}, rse:{}\n'.format(mse, mae, rse))
+        f.write('training_time:{}\n'.format(training_time_str))
         f.write('\n')
         f.close()
 
