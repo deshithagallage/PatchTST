@@ -91,6 +91,10 @@ if __name__ == '__main__':
     parser.add_argument('--use_multi_gpu', action='store_true', help='use multiple gpus', default=False)
     parser.add_argument('--devices', type=str, default='0,1,2,3', help='device ids of multile gpus')
     parser.add_argument('--test_flop', action='store_true', default=False, help='See utils/tools for usage')
+    
+    # Enhanced multi-scale patching argument
+    parser.add_argument('--multi_scale', nargs='*', default=None, 
+                        help='Enable multi-scale patching. Options: small, medium, large. If no options given, uses all three scales.')
 
     args = parser.parse_args()
 
